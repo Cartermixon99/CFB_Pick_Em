@@ -1,0 +1,168 @@
+mutation CreateUser {
+  user_insert(data: {
+    id_expr: "auth.uid",
+    username: "newuser",
+    email: "user@example.com"
+  })
+}
+
+mutation UpdateUser($username: String, $email: String) @auth(level: USER) {
+  user_update(key: {id_expr: "auth.uid"}, data: {username: $username, email: $email})
+}
+
+mutation DeleteUser @auth(level: USER) {
+  user_delete(key: {id_expr: "auth.uid"})
+}
+
+query GetMe @auth(level: USER) {
+  user(key: {id_expr: "auth.uid"}) {
+    username
+    email
+  }
+}
+
+query ListUsers @auth(level: PUBLIC, insecureReason: "Publicly visible user profiles") {
+  users {
+    username
+  }
+}
+
+mutation CreateLeague($name: String!, $inviteCode: String!, $description: String) @auth(level: USER) {
+  league_insert(data: {
+    name: $name,
+    inviteCode: $inviteCode,
+    description: $description,
+    ownerId_expr: "auth.uid"
+  })
+}
+
+mutation UpdateLeague($id: UUID!, $description: String) @auth(level: USER) {
+  league_update(id: $id, data: {description: $description})
+}
+
+mutation DeleteLeague($id: UUID!) @auth(level: USER) {
+  league_delete(id: $id)
+}
+
+query GetLeague($id: UUID!) @auth(level: PUBLIC, insecureReason: "Leagues are discoverable") {
+  league(id: $id) {
+    name
+    owner { username }
+  }
+}
+
+query ListLeagues @auth(level: PUBLIC, insecureReason: "League discovery") {
+  leagues {
+    name
+  }
+}
+
+mutation CreateGame($home: String!, $away: String!, $startTime: Timestamp!, $league: String!) @auth(level: USER) {
+  game_insert(data: {
+    homeTeam: $home,
+    awayTeam: $away,
+    startTime: $startTime,
+    leagueType: $league
+  })
+}
+
+mutation UpdateGameScore($id: UUID!, $homeScore: Int, $awayScore: Int) @auth(level: USER) {
+  game_update(id: $id, data: {homeScore: $homeScore, awayScore: $awayScore})
+}
+
+mutation DeleteGame($id: UUID!) @auth(level: USER) {
+  game_delete(id: $id)
+}
+
+query GetGame($id: UUID!) @auth(level: PUBLIC, insecureReason: "Games are public events") {
+  game(id: $id) {
+    homeTeam
+    awayTeam
+    startTime
+  }
+}
+
+query ListGames @auth(level: PUBLIC, insecureReason: "Game schedule visibility") {
+  games {
+    homeTeam
+    awayTeam
+  }
+}
+
+mutation CreatePick($gameId: UUID!, $predictedWinnerId: String!, $week: Int!) @auth(level: USER) {
+  pick_insert(data: {
+    userId_expr: "auth.uid",
+    gameId: $gameId,
+    predictedWinnerId: $predictedWinnerId,
+    weekNumber: $week
+  })
+}
+
+mutation UpdatePick($id: UUID!, $winner: String!) @auth(level: USER) {
+  pick_update(id: $id, data: {predictedWinnerId: $winner})
+}
+
+mutation DeletePick($id: UUID!) @auth(level: USER) {
+  pick_delete(id: $id)
+}
+
+query GetPick($id: UUID!) @auth(level: USER) {
+  pick(id: $id) {
+    predictedWinnerId
+    weekNumber
+  }
+}
+
+query ListMyPicks @auth(level: USER) {
+  picks(where: {userId: {eq_expr: "auth.uid"}}) {
+    game { homeTeam awayTeam }
+    weekNumber
+  }
+}
+
+mutation JoinLeague($leagueId: UUID!) @auth(level: USER) {
+  leagueMembership_insert(data: {
+    userId_expr: "auth.uid",
+    leagueId: $leagueId
+  })
+}
+
+mutation LeaveLeague($leagueId: UUID!) @auth(level: USER) {
+  leagueMembership_delete(key: {userId_expr: "auth.uid", leagueId: $leagueId})
+}
+
+query ListMyLeagues @auth(level: USER) {
+  leagueMemberships(where: {userId: {eq_expr: "auth.uid"}}) {
+    league { name }
+  }
+}
+
+mutation AddSeasonStats($leagueId: UUID!, $totalCorrect: Int!) @auth(level: USER) {
+  seasonStats_insert(data: {
+    userId_expr: "auth.uid",
+    leagueId: $leagueId,
+    totalCorrectPicks: $totalCorrect
+  })
+}
+
+mutation UpdateStats($id: UUID!, $totalCorrect: Int!) @auth(level: USER) {
+  seasonStats_update(id: $id, data: {totalCorrectPicks: $totalCorrect})
+}
+
+mutation DeleteStats($id: UUID!) @auth(level: USER) {
+  seasonStats_delete(id: $id)
+}
+
+query GetMyStats($leagueId: UUID!) @auth(level: USER) {
+  seasonStatss(where: {userId: {eq_expr: "auth.uid"}, leagueId: {eq: $leagueId}}) {
+    totalCorrectPicks
+    rank
+  }
+}
+
+query ListLeagueLeaderboard($leagueId: UUID!) @auth(level: PUBLIC, insecureReason: "Leaderboards are public") {
+  seasonStatss(where: {leagueId: {eq: $leagueId}}, orderBy: [{totalCorrectPicks: DESC}]) {
+    user { username }
+    totalCorrectPicks
+  }
+}

@@ -1,0 +1,30 @@
+mutation SeedDatabase @transaction {
+  user_insertMany(data: [
+    { username: "alice", email: "alice@example.com", totalWins: 10 },
+    { username: "bob", email: "bob@example.com", totalWins: 5 },
+    { username: "charlie", email: "charlie@example.com", totalWins: 2 }
+  ])
+  league_insertMany(data: [
+    { name: "Premier League", inviteCode: "PL2024", owner: { id: "00000000-0000-0000-0000-000000000001" }, description: "Top tier", maxParticipants: 10 },
+    { name: "Casual League", inviteCode: "CAS2024", owner: { id: "00000000-0000-0000-0000-000000000002" }, description: "Just for fun", maxParticipants: 20 }
+  ])
+  game_insertMany(data: [
+    { homeTeam: "Team A", awayTeam: "Team B", startTime: "2024-05-01T10:00:00Z", leagueType: "Regular", homeScore: 2, awayScore: 1 },
+    { homeTeam: "Team C", awayTeam: "Team D", startTime: "2024-05-02T14:00:00Z", leagueType: "Playoff", homeScore: 0, awayScore: 3 },
+    { homeTeam: "Team E", awayTeam: "Team A", startTime: "2024-05-03T18:00:00Z", leagueType: "Regular", homeScore: 1, awayScore: 1 }
+  ])
+  leagueMembership_insertMany(data: [
+    { user: { id: "00000000-0000-0000-0000-000000000001" }, league: { id: "00000000-0000-0000-0000-000000000001" } },
+    { user: { id: "00000000-0000-0000-0000-000000000002" }, league: { id: "00000000-0000-0000-0000-000000000001" } },
+    { user: { id: "00000000-0000-0000-0000-000000000003" }, league: { id: "00000000-0000-0000-0000-000000000002" } }
+  ])
+  pick_insertMany(data: [
+    { user: { id: "00000000-0000-0000-0000-000000000001" }, game: { id: "00000000-0000-0000-0000-000000000001" }, predictedWinnerId: "Team A", weekNumber: 1 },
+    { user: { id: "00000000-0000-0000-0000-000000000002" }, game: { id: "00000000-0000-0000-0000-000000000001" }, predictedWinnerId: "Team B", weekNumber: 1 },
+    { user: { id: "00000000-0000-0000-0000-000000000003" }, game: { id: "00000000-0000-0000-0000-000000000002" }, predictedWinnerId: "Team D", weekNumber: 1 }
+  ])
+  seasonStats_insertMany(data: [
+    { user: { id: "00000000-0000-0000-0000-000000000001" }, league: { id: "00000000-0000-0000-0000-000000000001" }, totalCorrectPicks: 5, rank: 1, weekAccuracyScores: [0.8, 0.9] },
+    { user: { id: "00000000-0000-0000-0000-000000000002" }, league: { id: "00000000-0000-0000-0000-000000000001" }, totalCorrectPicks: 3, rank: 2, weekAccuracyScores: [0.6, 0.7] }
+  ])
+}

@@ -1,0 +1,32 @@
+{
+  "rules": {
+    "leaderboard": {
+      ".read": true,
+      "$user": {
+        ".write": true
+      }
+    },
+    "nfl_leaderboard": {
+      ".read": true,
+      "$user": {
+        ".write": true
+      }
+    },
+    "top25": {
+      ".read": true,
+      "CFB": {
+        "$week": {
+          "$user": {
+            ".write": true
+          }
+        }
+      }
+    },
+    "users": {
+      "$user": {
+        ".read": true,
+        ".write": "!data.exists() || (data.child('password').val().length != 64 && newData.child('password').val().length == 64)"
+      }
+    }
+  }
+}

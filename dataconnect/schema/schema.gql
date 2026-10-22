@@ -1,0 +1,44 @@
+type User @table {
+  username: String!
+  email: String!
+  avatarUrl: String
+  totalWins: Int
+}
+
+type League @table {
+  name: String!
+  inviteCode: String!
+  owner: User!
+  description: String
+  maxParticipants: Int
+}
+
+type Game @table {
+  homeTeam: String!
+  awayTeam: String!
+  startTime: Timestamp!
+  leagueType: String!
+  winnerTeamId: String
+  homeScore: Int
+  awayScore: Int
+}
+
+type Pick @table {
+  user: User!
+  game: Game!
+  predictedWinnerId: String!
+  weekNumber: Int!
+}
+
+type LeagueMembership @table(key: ["user", "league"]) {
+  user: User!
+  league: League!
+}
+
+type SeasonStats @table {
+  user: User!
+  league: League!
+  totalCorrectPicks: Int!
+  rank: Int
+  weekAccuracyScores: [Float]
+}
