@@ -625,6 +625,7 @@
         let teamLogos = {}; 
         let teamIds = {};
         let teamStatsCache = {};
+        let espnTeamRecords = { CFB: {}, NFL: {} };
 
         // ==========================================
         // DATA DICTIONARIES
@@ -908,6 +909,125 @@
         const getActiveLeaderboard = () => currentSport === 'CFB' ? cfbLeaderboardData : nflLeaderboardData;
         const isP4Game = game => currentSport !== 'CFB' || (p4CfbSchools.has(game.home) || p4CfbSchools.has(game.away));
         const getGamesForPicks = weekNum => (getActiveGamesByWeek()[weekNum] || []).filter(isP4Game);
+
+        function updateEspnRecord(sport, team, rec) {
+            if (!rec || !team) return;
+            const clean = cleanTeamName(team);
+            if (!espnTeamRecords[sport]) espnTeamRecords[sport] = {};
+            const existing = espnTeamRecords[sport][clean];
+            if (!existing) {
+                espnTeamRecords[sport][clean] = rec;
+                return;
+            }
+            const exTotal = existing.split('-').map(Number).reduce((a, b) => a + (isNaN(b) ? 0 : b), 0);
+            const newTotal = rec.split('-').map(Number).reduce((a, b) => a + (isNaN(b) ? 0 : b), 0);
+            if (newTotal >= exTotal) {
+                espnTeamRecords[sport][clean] = rec;
+            }
+        }
+
+        function getTeamCurrentRecord(team, sport = currentSport) {
+            if (!team) return '0-0';
+            const clean = cleanTeamName(team);
+            const mapped = teamNameMapper[clean] || clean;
+            let resolvedSport = sport;
+            if (!resolvedSport) {
+                if (typeof fbsSchools !== 'undefined' && fbsSchools.includes(clean)) resolvedSport = 'CFB';
+                else if (typeof nflTeams !== 'undefined' && nflTeams?.NFL?.includes(clean)) resolvedSport = 'NFL';
+                else resolvedSport = 'CFB';
+            }
+
+            const gamesByWeek = resolvedSport === 'CFB' ? cfbGamesByWeek : nflGamesByWeek;
+            let wins = 0;
+            let losses = 0;
+            let ties = 0;
+
+            if (gamesByWeek) {
+                const seen = new Set();
+                Object.values(gamesByWeek).flat().forEach(game => {
+                    if (!game) return;
+                    const key = game.gameId || game.gameKey || `${game.home}_${game.away}_${game.dateStr}`;
+                    if (seen.has(key)) return;
+
+                    const homeClean = cleanTeamName(game.home);
+                    const awayClean = cleanTeamName(game.away);
+                    const isHome = (homeClean === clean || homeClean === mapped);
+                    const isAway = (awayClean === clean || awayClean === mapped);
+                    if (!isHome && !isAway) return;
+
+                    if (game.statusState === 'in') return;
+                    const isFinished = !!(game.isCompleted || game.statusState === 'post' || (game.winner && (isHome || isAway)));
+                    if (!isFinished) return;
+
+                    const hScore = Number(game.homeScore);
+                    const aScore = Number(game.awayScore);
+                    const hasScores = Number.isFinite(hScore) && Number.isFinite(aScore);
+
+                    seen.add(key);
+
+                    if (game.winner) {
+                        const winClean = cleanTeamName(game.winner);
+                        if (winClean === clean || winClean === mapped) wins++;
+                        else losses++;
+                    } else if (hasScores) {
+                        const teamScore = isHome ? hScore : aScore;
+                        const oppScore = isHome ? aScore : hScore;
+                        if (teamScore > oppScore) wins++;
+                        else if (oppScore > teamScore) losses++;
+                        else ties++;
+                    }
+                });
+            }
+
+            const calcTotal = wins + losses + ties;
+            const espnRec = espnTeamRecords?.[resolvedSport]?.[clean] || espnTeamRecords?.[resolvedSport]?.[mapped];
+            if (espnRec) {
+                const espnParts = espnRec.split('-').map(Number);
+                const espnTotal = espnParts.reduce((a, b) => a + (isNaN(b) ? 0 : b), 0);
+                if (espnTotal > calcTotal) {
+                    const cleanedEspn = espnRec.replace(/-0$/, '');
+                    const [w, l] = cleanedEspn.split('-');
+                    if (w !== undefined && l !== undefined) {
+                        return `${w}-${l}`;
+                    }
+                    return cleanedEspn;
+                }
+            }
+
+            return `${wins}-${losses}`;
+        }
+
+        function getGameTeamRank(game, team) {
+            if (!game || currentSport !== 'CFB' || !team) return null;
+            const clean = cleanTeamName(team);
+            const homeClean = cleanTeamName(game.home);
+            const awayClean = cleanTeamName(game.away);
+            const mapped = teamNameMapper[clean] || clean;
+
+            let rank = null;
+            if (homeClean === clean || homeClean === mapped) {
+                rank = game.homeRank;
+            } else if (awayClean === clean || awayClean === mapped) {
+                rank = game.awayRank;
+            }
+
+            let num = parseInt(rank, 10);
+            if (Number.isInteger(num) && num >= 1 && num <= 25) {
+                return num;
+            }
+
+            if (typeof apRankingsCache !== 'undefined' && apRankingsCache) {
+                const ap = apRankingsCache[clean] || apRankingsCache[mapped] || apRankingsCache[team] || 
+                           (game.homeId && (homeClean === clean || homeClean === mapped) ? apRankingsCache[game.homeId] : null) || 
+                           (game.awayId && (awayClean === clean || awayClean === mapped) ? apRankingsCache[game.awayId] : null);
+                num = parseInt(ap, 10);
+                if (Number.isInteger(num) && num >= 1 && num <= 25) {
+                    return num;
+                }
+            }
+
+            return null;
+        }
         function markPicksDirty(phase) {
             if (currentUser) pickChangeVersions[currentSport][phase]++;
         }
@@ -1073,6 +1193,7 @@
             if (!document.getElementById('section-results').classList.contains('hidden')) calculateAccuracy();
             if (!document.getElementById('section-variance').classList.contains('hidden')) renderVariance();
             if (!document.getElementById('section-highlights').classList.contains('hidden')) renderHighlights();
+            if (sport === 'CFB' && !document.getElementById('section-top25').classList.contains('hidden')) renderTop25();
             renderIcons();
         }
 
@@ -1256,6 +1377,7 @@
             for (let conf in cfbTeams) { cfbTeams[conf].forEach(t => { cfbScheduleData[conf][t] = []; }); }
             nflTeams["NFL"].forEach(t => { nflScheduleData["NFL"][t] = []; });
             try {
+                fetchRankingsData().catch(() => {});
                 const cfbWks = Array.from({length: 15}, (_, i) => i + 1);
                 const cfbPromises = cfbWks.map(week => fetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&seasontype=2&week=${week}`).then(res => res.json()).catch(e => null));
                 
@@ -1279,6 +1401,42 @@
                             
                             let name0 = teamNameMapper[comp0.team.location] || comp0.team.location;
                             let name1 = teamNameMapper[comp1.team.location] || comp1.team.location;
+
+                            const extractCompRecord = comp => {
+                                if (!comp) return null;
+                                if (Array.isArray(comp.records)) {
+                                    const r = comp.records.find(x => x && (x.type === 'total' || x.name === 'overall')) || comp.records[0];
+                                    if (r && typeof r.summary === 'string' && /^\d+-\d+(?:-\d+)?$/.test(r.summary.trim())) {
+                                        return r.summary.trim();
+                                    }
+                                }
+                                const sum = comp.team?.recordSummary;
+                                if (sum && typeof sum === 'string' && /^\d+-\d+(?:-\d+)?$/.test(sum.trim())) {
+                                    return sum.trim();
+                                }
+                                return null;
+                            };
+                            const extractCompRank = comp => {
+                                if (!comp) return null;
+                                const rankVal = comp.curatedRank?.current ?? comp.rank ?? comp.curatedRank ?? comp.team?.rank ?? comp.team?.curatedRank?.current;
+                                const num = parseInt(rankVal, 10);
+                                if (Number.isInteger(num) && num >= 1 && num <= 25) {
+                                    return num;
+                                }
+                                const rawName = comp.team?.location || comp.team?.displayName || '';
+                                const m = String(rawName).match(/^[#\(](\d+)[\)\s]/);
+                                if (m) {
+                                    const p = parseInt(m[1], 10);
+                                    if (p >= 1 && p <= 25) return p;
+                                }
+                                return null;
+                            };
+                            const rank0 = extractCompRank(comp0);
+                            const rank1 = extractCompRank(comp1);
+                            const homeRank = isHome0 ? rank0 : rank1;
+                            const awayRank = isHome0 ? rank1 : rank0;
+                            updateEspnRecord('CFB', name0, extractCompRecord(comp0));
+                            updateEspnRecord('CFB', name1, extractCompRecord(comp1));
 
                             // Dynamic Logo & ID Capture
                             if (comp0.team.logo) teamLogos[name0] = comp0.team.logo;
@@ -1319,6 +1477,7 @@
                                         homeId: isHome0 ? comp0.team.id : comp1.team.id,
                                         awayId: isHome0 ? comp1.team.id : comp0.team.id,
                                         gameKey: gameKey, home: homeTeam, away: awayTeam, dateObj: gameDate, dateStr: timeDisplay,
+                                        homeRank: homeRank, awayRank: awayRank,
                                         isNeutral: match.neutralSite, winner: match.status.type.completed ? (comp0.winner ? name0 : comp1.winner ? name1 : null) : null,
                                         homeScore: isHome0 ? comp0.score : comp1.score,
                                         awayScore: isHome0 ? comp1.score : comp0.score,
@@ -1329,6 +1488,8 @@
                                         statusDetail: match.status?.type?.shortDetail || match.status?.type?.detail || event.status?.type?.shortDetail || ''
                                     });
                                 } else {
+                                    if (homeRank !== null) existingCfbGame.homeRank = homeRank;
+                                    if (awayRank !== null) existingCfbGame.awayRank = awayRank;
                                     existingCfbGame.winner = match.status.type.completed ? (comp0.winner ? name0 : comp1.winner ? name1 : null) : null;
                                     existingCfbGame.homeScore = isHome0 ? comp0.score : comp1.score;
                                     existingCfbGame.awayScore = isHome0 ? comp1.score : comp0.score;
@@ -1373,6 +1534,8 @@
                             
                             let name0 = comp0.team.displayName;
                             let name1 = comp1.team.displayName;
+                            updateEspnRecord('NFL', name0, extractCompRecord(comp0));
+                            updateEspnRecord('NFL', name1, extractCompRecord(comp1));
 
                             // Dynamic Logo & ID Capture
                             if (comp0.team.logo) teamLogos[name0] = comp0.team.logo;
@@ -2189,17 +2352,26 @@
         }
 
         function getTop25TeamStats(team) {
-            const games = Object.values(cfbGamesByWeek).flat().filter(game => game.home === team || game.away === team);
-            const completed = games.filter(game => game.isCompleted && Number.isFinite(Number(game.homeScore)) && Number.isFinite(Number(game.awayScore)));
-            const wins = completed.filter(game => game.winner === team).length;
-            const losses = completed.length - wins;
+            const clean = cleanTeamName(team);
+            const record = getTeamCurrentRecord(clean, 'CFB');
+            const games = Object.values(cfbGamesByWeek).flat().filter(game => {
+                if (!game) return false;
+                const h = cleanTeamName(game.home);
+                const a = cleanTeamName(game.away);
+                return h === clean || a === clean;
+            });
+            const completed = games.filter(game => {
+                const isFinished = !!(game.isCompleted || game.statusState === 'post' || game.winner);
+                return isFinished && Number.isFinite(Number(game.homeScore)) && Number.isFinite(Number(game.awayScore));
+            });
             const latest = completed.sort((first, second) => second.dateObj - first.dateObj)[0];
-            if (!latest) return { record: `${wins}-${losses}`, recent: 'No completed games yet' };
-            const opponent = latest.home === team ? latest.away : latest.home;
-            const teamScore = latest.home === team ? latest.homeScore : latest.awayScore;
-            const opponentScore = latest.home === team ? latest.awayScore : latest.homeScore;
-            const result = latest.winner === team ? 'W' : (latest.winner ? 'L' : 'T');
-            return { record: `${wins}-${losses}`, recent: `${result} ${teamScore}-${opponentScore} vs ${opponent}` };
+            if (!latest) return { record, recent: 'No completed games yet' };
+            const isHome = cleanTeamName(latest.home) === clean;
+            const opponent = isHome ? latest.away : latest.home;
+            const teamScore = isHome ? latest.homeScore : latest.awayScore;
+            const opponentScore = isHome ? latest.awayScore : latest.homeScore;
+            const result = latest.winner ? (cleanTeamName(latest.winner) === clean ? 'W' : 'L') : (Number(teamScore) > Number(opponentScore) ? 'W' : (Number(opponentScore) > Number(teamScore) ? 'L' : 'T'));
+            return { record, recent: `${result} ${teamScore}-${opponentScore} vs ${opponent}` };
         }
 
         function top25TeamMarkup(team, index, editable, previousTeams = []) {
@@ -2209,8 +2381,7 @@
             return `<div draggable="${editable}" ondragstart="top25DragStart(event, ${index})" ondragover="top25DragOver(event)" ondrop="top25Drop(event, ${index})" class="flex items-center gap-3 p-3 mb-2 rounded-lg border border-black/10 shadow-sm ${editable ? 'cursor-grab' : ''}" style="background-color:${colors.primary};color:${colors.secondary}">
                 <span class="w-7 text-center font-black text-white">${index + 1}</span>
                 ${logo}
-                <span class="flex-1 min-w-0"><span class="block font-black truncate">${highlightEscape(team)}</span><span class="block text-xs font-black opacity-80 truncate">${highlightEscape(stats.recent)}</span></span>
-                <span class="text-sm font-black whitespace-nowrap">${stats.record}</span>
+                <span class="flex-1 min-w-0"><span class="block font-black truncate">${highlightEscape(team)} (${stats.record})</span><span class="block text-xs font-black opacity-80 truncate">${highlightEscape(stats.recent)}</span></span>
                 ${top25MovementMarkup(team, index, previousTeams)}
                 ${editable ? `<button type="button" aria-label="Remove ${highlightEscape(team)}" onclick="removeTop25Team(${index})" class="text-current hover:opacity-70 font-black text-2xl px-2 leading-none">&times;</button>` : ''}
             </div>`;
@@ -2219,7 +2390,8 @@
         function top25SubmittedTeamMarkup(team, index, previousTeams = []) {
             const colors = cfbColors[team] || { primary: '#0F172A', secondary: '#CBD5E1' };
             const logo = teamLogos[team] ? `<img src="${teamLogos[team]}" alt="${highlightEscape(team)} logo" class="w-2/3 h-2/3 object-contain logo-shadow">` : '<span class="w-2/3 h-2/3 rounded-full bg-black/10"></span>';
-            return `<div class="relative aspect-square min-w-0 rounded-lg border border-black/10 shadow-sm flex flex-col items-center justify-center gap-1 p-2 text-center" style="background-color:${colors.primary};color:${colors.secondary}" title="#${index + 1} ${highlightEscape(team)}">
+            const record = getTeamCurrentRecord(team, 'CFB');
+            return `<div class="relative aspect-square min-w-0 rounded-lg border border-black/10 shadow-sm flex flex-col items-center justify-center gap-1 p-2 text-center" style="background-color:${colors.primary};color:${colors.secondary}" title="#${index + 1} ${highlightEscape(team)} (${record})">
                 <span class="absolute top-1 left-1 text-sm font-black text-white leading-none">${index + 1}</span>
                 <span class="absolute top-1 right-1">${top25MovementMarkup(team, index, previousTeams)}</span>
                 ${logo}
@@ -2454,6 +2626,12 @@
 
                 const team = game.home;
                 const opponent = game.away;
+                const teamRecord = getTeamCurrentRecord(team, currentSport);
+                const oppRecord = getTeamCurrentRecord(opponent, currentSport);
+                const teamRank = getGameTeamRank(game, team);
+                const oppRank = getGameTeamRank(game, opponent);
+                const teamRankPrefix = teamRank ? `#${teamRank} ` : '';
+                const oppRankPrefix = oppRank ? `#${oppRank} ` : '';
                 const teamColorsPrimary = activeColors[team] || { primary: "#334155", secondary: "#FFFFFF" };
                 const teamColorsOpp = activeColors[opponent] || { primary: "#64748B", secondary: "#FFFFFF" };
                 
@@ -2527,12 +2705,12 @@
                     <div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
                         <div class="flex items-center space-x-3 w-full md:w-5/12">
                             <button onclick="makeWeeklyPick('${game.gameKey}', '${opponent}', '${game.dateObj}', '${game.statusState}')" 
-                                aria-label="Pick ${opponent} to win"
+                                aria-label="Pick ${oppRankPrefix}${opponent} (${oppRecord}) to win"
                                 class="w-full text-right p-3 rounded font-black border transition-all flex items-center justify-between ${isLocked ? 'cursor-not-allowed' : 'hover:brightness-95'} ${effectivePick === opponent ? 'ring-2 ring-purple-600 ring-offset-2 shadow-md' : 'border-black/10'}"
                                 style="background-color: ${teamColorsOpp.primary}; color: ${teamColorsOpp.secondary}"
                                 ${isLocked ? 'disabled' : ''}>
                                 ${oppLogoHTML}
-                                <span class="flex-grow text-left ml-2 truncate font-black text-sm">${opponent}</span>
+                                <span class="flex-grow text-left ml-2 truncate font-black text-sm">${oppRankPrefix}${opponent} (${oppRecord})</span>
                                 ${isLive && hasScores ? `<span class="font-mono font-black text-sm px-2 py-0.5 rounded bg-black/25 text-white ml-2 shrink-0 shadow-inner">${awayScore}</span>` : ''}
                                 ${oppProbText}
                             </button>
@@ -2542,13 +2720,13 @@
                         
                         <div class="flex items-center space-x-3 w-full md:w-5/12">
                             <button onclick="makeWeeklyPick('${game.gameKey}', '${team}', '${game.dateObj}', '${game.statusState}')" 
-                                aria-label="Pick ${team} to win"
+                                aria-label="Pick ${teamRankPrefix}${team} (${teamRecord}) to win"
                                 class="w-full text-left p-3 rounded font-black border transition-all flex items-center justify-between ${isLocked ? 'cursor-not-allowed' : 'hover:brightness-95'} ${effectivePick === team ? 'ring-2 ring-purple-600 ring-offset-2 shadow-md' : 'border-black/10'}"
                                 style="background-color: ${teamColorsPrimary.primary}; color: ${teamColorsPrimary.secondary}"
                                 ${isLocked ? 'disabled' : ''}>
                                 ${teamProbText}
                                 ${isLive && hasScores ? `<span class="font-mono font-black text-sm px-2 py-0.5 rounded bg-black/25 text-white mr-2 shrink-0 shadow-inner">${homeScore}</span>` : ''}
-                                <span class="flex-grow text-right mr-2 truncate font-black text-sm">${team}</span>
+                                <span class="flex-grow text-right mr-2 truncate font-black text-sm">${teamRankPrefix}${team} (${teamRecord})</span>
                                 ${teamLogoHTML}
                             </button>
                         </div>
@@ -3044,6 +3222,10 @@
             ].map(([label, value, color]) => `<div><p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${label}</p><p class="text-2xl font-black font-mono ${color}">${label === 'Max Profit' ? '+' : ''}${value.toFixed(2)}</p></div>`).join('');
             const now = new Date();
             container.innerHTML = games.map(game => {
+                const awayRank = getGameTeamRank(game, game.away);
+                const homeRank = getGameTeamRank(game, game.home);
+                const awayRankPrefix = awayRank ? `#${awayRank} ` : '';
+                const homeRankPrefix = homeRank ? `#${homeRank} ` : '';
                 const isFinished = !!(game.winner || game.isCompleted || game.statusState === 'post');
                 const isLive = !isFinished && game.statusState === 'in';
                 const locked = now > game.dateObj || isLive || isFinished;
@@ -3073,13 +3255,13 @@
                         <div class="mb-3 p-3 rounded-md bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 shadow-sm border border-slate-800">
                             <div class="flex items-center gap-2.5 flex-wrap">
                                 <div class="flex items-center gap-1.5">
-                                    <span class="font-bold text-slate-200 text-xs">${game.away}</span>
+                                    <span class="font-bold text-slate-200 text-xs">${awayRankPrefix}${game.away}</span>
                                     <span class="font-mono font-black text-base text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shadow-inner">${awayScore}</span>
                                 </div>
                                 <span class="text-slate-500 font-black text-xs">@</span>
                                 <div class="flex items-center gap-1.5">
                                     <span class="font-mono font-black text-base text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shadow-inner">${homeScore}</span>
-                                    <span class="font-bold text-slate-200 text-xs">${game.home}</span>
+                                    <span class="font-bold text-slate-200 text-xs">${homeRankPrefix}${game.home}</span>
                                 </div>
                                 ${isLive ? `
                                     <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/30">
@@ -3200,7 +3382,9 @@
 
                     return `<div class="flex flex-col md:flex-row md:items-center gap-2 border-t border-slate-100 pt-3 ${settledClass}"><span class="w-24 text-xs font-black uppercase text-slate-500">${market.label}</span><div class="flex flex-1 gap-2">${choices}</div><div class="flex items-center gap-1"><button type="button" onclick="adjustBonusBetEncoded('${bonusValue(game.gameKey)}', '${bonusValue(market.key)}', -1)" class="w-8 h-8 rounded bg-slate-200 hover:bg-slate-300 font-black" ${locked ? 'disabled' : ''}>-</button><input type="number" min="0" step="0.1" value="${wager.amount || ''}" onchange="updateBonusBetEncoded('${bonusValue(game.gameKey)}', '${bonusValue(market.key)}', '${bonusValue(selected)}', this.value, ${Number.isFinite(Number(wager.line)) ? Number(wager.line) : 'null'}, ${Number.isFinite(Number(wager.odds)) ? Number(wager.odds) : 'null'})" class="w-20 h-8 rounded border border-slate-300 text-center font-black" ${locked ? 'disabled' : ''}><button type="button" onclick="adjustBonusBetEncoded('${bonusValue(game.gameKey)}', '${bonusValue(market.key)}', 1)" class="w-8 h-8 rounded bg-slate-200 hover:bg-slate-300 font-black" ${locked || bankroll.available <= 0 ? 'disabled' : ''}>+</button></div>${!isFinished && payout ? `<span class="text-xs font-black text-blue-600 whitespace-nowrap">Potential: ${payout.toFixed(2)}</span>` : ''}${trackingMarkup}</div>`;
                 }).join('');
-                return `<div class="p-4 rounded-md border border-slate-200 bg-white shadow-sm"><div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-200 pb-3 mb-3"><div class="flex items-center gap-3 min-w-0"><div class="flex items-center gap-1.5 shrink-0">${awayLogo}${homeLogo}</div><div class="min-w-0"><h3 class="font-black text-slate-900 truncate">${game.away} at ${game.home}</h3><p class="text-xs font-bold text-slate-500">${game.dateStr}</p></div></div><div class="flex items-center gap-2 shrink-0"><button type="button" onclick="generateInsights('${bonusValue(game.gameKey)}', ${weekNum > actualCurrentWeek})" class="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded transition-colors border border-slate-200 text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer"><i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-blue-600"></i> Game Info</button>${locked ? `<button type="button" onclick="openGameSummary('${bonusValue(game.gameKey)}')" class="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded transition-colors border border-slate-200 text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer"><i data-lucide="activity" class="w-3.5 h-3.5 text-blue-600"></i> Game Summary</button>` : ''}<span class="text-xs font-black uppercase ${statusColor}">${statusLabel}</span></div></div>${liveScoreboardHTML}${rows}</div>`;
+                const awayRecord = getTeamCurrentRecord(game.away, currentSport);
+                const homeRecord = getTeamCurrentRecord(game.home, currentSport);
+                return `<div class="p-4 rounded-md border border-slate-200 bg-white shadow-sm"><div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-200 pb-3 mb-3"><div class="flex items-center gap-3 min-w-0"><div class="flex items-center gap-1.5 shrink-0">${awayLogo}${homeLogo}</div><div class="min-w-0"><h3 class="font-black text-slate-900 truncate">${awayRankPrefix}${game.away} (${awayRecord}) ${game.isNeutral ? 'vs' : 'at'} ${homeRankPrefix}${game.home} (${homeRecord})</h3><p class="text-xs font-bold text-slate-500">${game.dateStr}</p></div></div><div class="flex items-center gap-2 shrink-0"><button type="button" onclick="generateInsights('${bonusValue(game.gameKey)}', ${weekNum > actualCurrentWeek})" class="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded transition-colors border border-slate-200 text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer"><i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-blue-600"></i> Game Info</button>${locked ? `<button type="button" onclick="openGameSummary('${bonusValue(game.gameKey)}')" class="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded transition-colors border border-slate-200 text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer"><i data-lucide="activity" class="w-3.5 h-3.5 text-blue-600"></i> Game Summary</button>` : ''}<span class="text-xs font-black uppercase ${statusColor}">${statusLabel}</span></div></div>${liveScoreboardHTML}${rows}</div>`;
             }).join('');
             renderIcons();
         }
@@ -3572,7 +3756,7 @@
                 .replace(/^@\s*/, "")
                 .replace(/^#\d+\s*/, "")
                 .replace(/^\(\d+\)\s*/, "")
-                .replace(/\s*\(\d+-\d+\)/, "")
+                .replace(/\s*\(\d+-\d+(?:-\d+)?\)/, "")
                 .trim();
         }
 

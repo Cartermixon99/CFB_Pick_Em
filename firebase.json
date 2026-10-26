@@ -4,7 +4,15 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "users_backup_*.json",
+      "migrate_passwords.*",
+      "test_login.js",
+      "scratch_script.js",
+      "README.md",
+      "*.bak",
+      "*.failed",
+      "*.pre_*"
     ]
   },
   "database": {

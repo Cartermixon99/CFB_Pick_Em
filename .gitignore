@@ -48,6 +48,8 @@ build/Release
 node_modules/
 
 # Optional npm cache directory
+users_backup_*.json
+migrate_passwords.*
 .npm
 
 # Optional eslint cache
