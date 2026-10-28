@@ -1,0 +1,71 @@
+:root {
+    --win-color: #4DFFBC;
+    --win-text: #059669;
+    --loss-color: #FF4D4D;
+    --loss-text: #DC2626;
+    --brand-blue: #2563EB;
+    --brand-purple: #7C3AED;
+    --brand-purple-hover: #6D28D9;
+}
+* { -webkit-tap-highlight-color: transparent; }
+body { 
+    transition: background-color 0.3s ease-in-out;
+    padding-bottom: env(safe-area-inset-bottom, 1.5rem);
+}
+.tab-active { background-color: #7C3AED; color: #ffffff; font-weight: 700; }
+.tab-inactive { background-color: #f1f5f9; color: #475569; font-weight: 600; }
+.tab-inactive:hover { background-color: #e2e8f0; color: #0f172a; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* Enhanced Bright Drop Shadow to make logos pop against any background color */
+.logo-shadow { filter: drop-shadow(0px 0px 3px rgba(255,255,255,1)) drop-shadow(0px 0px 6px rgba(255,255,255,0.85)) drop-shadow(0px 0px 12px rgba(255,255,255,0.45)); }
+.complete-pick-badge { display: inline-block; margin-left: 0.4rem; padding: 0.15rem 0.35rem; border-radius: 0.25rem; background: #d1fae5; color: #047857; font-size: 0.65rem; font-weight: 900; line-height: 1; letter-spacing: 0.04em; vertical-align: middle; }
+.highlight-card { min-height: 180px; }
+/* Thick & High-Impact Win/Loss Left Border Stripes */
+.stripe-win {
+    border-left: 8px solid #4DFFBC !important;
+    box-shadow: -3px 0 10px -1px rgba(77, 255, 188, 0.45), 0 1px 3px 0 rgba(0, 0, 0, 0.08) !important;
+}
+.stripe-loss {
+    border-left: 8px solid #FF4D4D !important;
+    box-shadow: -3px 0 10px -1px rgba(255, 77, 77, 0.45), 0 1px 3px 0 rgba(0, 0, 0, 0.08) !important;
+}
+.stripe-push {
+    border-left: 8px solid #94A3B8 !important;
+}
+/* Global focus-visible ring for keyboard accessibility */
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible {
+    outline: 2px solid #7C3AED;
+    outline-offset: 2px;
+}
+#user-display:not(.hidden) {
+    display: inline-flex !important;
+}
+
+@media (max-width: 640px) {
+    .dashboard-shell { 
+        margin-top: 0 !important; 
+        padding-left: 0.625rem !important; 
+        padding-right: 0.625rem !important; 
+        padding-top: 0.75rem !important;
+        padding-bottom: 2rem !important;
+        border-radius: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        background-color: #4b4e53 !important;
+    }
+    .dashboard-header { display: none !important; }
+    .team-banner { align-items: stretch; flex-direction: column; gap: 1rem; padding: 0.875rem; }
+    .team-banner-title { width: 100%; }
+    .team-banner-stats { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; text-align: left; }
+    .team-banner-stats > div { min-width: 0; text-align: left; }
+    .team-banner-stats > div { margin-left: 0 !important; }
+    .team-banner-stats > div:nth-child(n + 2) { border-left: 0; padding-left: 0; }
+    .team-banner-stats > div:last-child { grid-column: 1 / -1; border-top: 1px solid rgb(51 65 85); padding-top: 0.625rem; }
+    .team-banner-stats p { overflow-wrap: anywhere; }
+    .filter-row, .macro-row { flex-direction: column; gap: 0.75rem; }
+    .filter-row > div, .macro-row > button { width: 100%; }
+    .top25-submissions span.inline-flex { font-size: 0.5rem; padding: 0.125rem 0.25rem; }
+}

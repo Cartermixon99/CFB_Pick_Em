@@ -10,6 +10,8 @@
       "test_login.js",
       "scratch_script.js",
       "README.md",
+      "GEMINI.md",
+      "backups/**",
       "*.bak",
       "*.failed",
       "*.pre_*"
